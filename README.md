@@ -36,7 +36,7 @@ SoC
 
 Tunneled
 
-192.168.1.197:7125
+RASPBERRY_IP:7125
 
 The manager automatically updates the Moonraker address in the respective screen configuration.
 
