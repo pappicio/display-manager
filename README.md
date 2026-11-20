@@ -1,4 +1,4 @@
-OpenCreator Display Manager
+## OpenCreator Display Manager
 
 OpenCreator Display Manager manages GrumpyScreen and HelixScreen on the FlashForge Creator 5.
 
@@ -10,7 +10,7 @@ The selected interface is controlled by:
 
 /usr/data/opencreator/screen
 
-Accepted values:
+# Accepted values:
 
 grumpy
 
