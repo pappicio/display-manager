@@ -143,32 +143,48 @@ if [ -x "$HELIX_BIN" ]; then
     echo "[OK] HelixScreen already exists: $HELIX_BIN"
 else
     echo "[MISSING] HelixScreen not found."
-    echo "[DOWNLOAD] HelixScreen K1 v1.1.0-rc.4..."
+    echo "[DOWNLOAD] Downloading HelixScreen v1.1.0-rc.4..."
 
     ARCHIVE="/tmp/helixscreen-k1-v1.1.0-rc.4.tar.gz"
-    EXTRACT="/tmp/helixscreen-k1-install"
+    EXTRACT="/tmp/helixscreen-k1-extract"
 
-    curl -fL --retry 2 "$HELIX_URL" -o "$ARCHIVE"
-
-    echo "[INSTALL] Extracting official K1 package..."
     rm -rf "$EXTRACT"
     mkdir -p "$EXTRACT"
+
+    curl -fL --retry 2 --progress-bar "$HELIX_URL" -o "$ARCHIVE"
+
+    echo "[EXTRACT] Extracting HelixScreen package..."
     tar -xzf "$ARCHIVE" -C "$EXTRACT"
 
-    INSTALLER="$(find "$EXTRACT" -type f -name install.sh | head -n 1)"
-    if [ -z "$INSTALLER" ]; then
-        echo "[ERROR] Official HelixScreen installer not found in archive."
+    PACKAGE_DIR="$EXTRACT/helixscreen"
+
+    if [ ! -d "$PACKAGE_DIR" ]; then
+        echo "[ERROR] HelixScreen directory not found in package."
         exit 1
     fi
 
-    echo "[INSTALL] Running official HelixScreen installer..."
-    sh "$INSTALLER" --yes
+    echo "[INSTALL] Copying HelixScreen files to $HELIX_DIR..."
+    mkdir -p "$HELIX_DIR"
+    cp -a "$PACKAGE_DIR/." "$HELIX_DIR/"
+
+    if [ ! -f "$HELIX_BIN" ]; then
+        echo "[ERROR] HelixScreen binary not found: $HELIX_BIN"
+        exit 1
+    fi
+
+    find "$HELIX_DIR/bin" -type f -exec chmod 755 {} \;
+
+    echo "[CLEANUP] Removing temporary files..."
+    rm -rf "$EXTRACT" "$ARCHIVE"
+
+    echo "[OK] HelixScreen installed successfully."
 fi
 
 if [ ! -x "$HELIX_BIN" ]; then
     echo "[ERROR] HelixScreen verification failed: $HELIX_BIN"
     exit 1
 fi
+
 echo "[OK] HelixScreen verified."
 
 echo
