@@ -62,9 +62,9 @@ It also adds the following include to:
 
 /usr/data/opencreator/klipper/config/printer.base.cfg
 
-# BEGIN display-manager include
+#BEGIN display-manager include
 [include oc-macros.cfg]
-# END display-manager include
+#END display-manager include
 
 G-code Commands
 
