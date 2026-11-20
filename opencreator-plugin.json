@@ -1,0 +1,14 @@
+{
+  "id": "display-manager",
+  "name": "OpenCreator Display Manager",
+  "version": "1.0.0",
+  "description": "Switch between HelixScreen and GrumpyScreen using Klipper macros.",
+  "dependencies": [
+    "script-runner"
+  ],
+  "scripts": {
+    "install": "install.sh",
+    "update": "update.sh",
+    "uninstall": "uninstall.sh"
+  }
+}
