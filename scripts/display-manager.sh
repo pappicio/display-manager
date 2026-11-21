@@ -144,8 +144,6 @@ prepare_grumpy() {
 }
 
 start_grumpy() {
-    stop_stock_helix
-    stop_stock_grumpy
     [ -x "$GRUMPY" ] || {
         log "ERRORE: eseguibile Grumpy non trovato"
         return 1
@@ -186,51 +184,6 @@ is_descendant() {
     done
 
     [ "$CHILD" = "$ROOT" ]
-}
-
-stop_stock_grumpy() {
-    log "Ricerca supervisore Grumpy originale..."
-
-    ROOTS=""
-
-    for PROC in /proc/[0-9]*; do
-        [ -d "$PROC" ] || continue
-        PID=${PROC##*/}
-        CMDLINE=$(tr '\000' ' ' < "$PROC/cmdline" 2>/dev/null)
-
-        case "$CMDLINE" in
-            *40-grumpyscreen.sh*) ROOTS="$ROOTS $PID" ;;
-        esac
-    done
-
-    for ROOT_PID in $ROOTS; do
-        PIDS="$ROOT_PID"
-
-        for PROC in /proc/[0-9]*; do
-            [ -d "$PROC" ] || continue
-            PID=${PROC##*/}
-            [ "$PID" = "$ROOT_PID" ] && continue
-            CMDLINE=$(tr '\000' ' ' < "$PROC/cmdline" 2>/dev/null)
-
-            case "$CMDLINE" in
-                *grumpyscreen*)
-                    if is_descendant "$PID" "$ROOT_PID"; then
-                        PIDS="$PIDS $PID"
-                    fi
-                    ;;
-            esac
-        done
-
-        log "Arresto Grumpy originale: supervisore PID=$ROOT_PID"
-        kill -TERM $PIDS 2>/dev/null
-        sleep 2
-
-        for PID in $PIDS; do
-            if kill -0 "$PID" 2>/dev/null; then
-                kill -KILL "$PID" 2>/dev/null
-            fi
-        done
-    done
 }
 
 stop_stock_helix() {
@@ -283,7 +236,6 @@ stop_stock_helix() {
 }
 
 start_helix() {
-    stop_stock_grumpy
     stop_stock_helix
 
     log "Avvio Helix con Moonraker $MOONRAKER_HOST:7125"

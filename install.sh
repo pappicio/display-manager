@@ -293,3 +293,42 @@ echo "[OK] GrumpyScreen: $GRUMPY_BIN"
 echo "[OK] HelixScreen:  $HELIX_BIN"
 echo "[OK] Display Manager installed."
 echo "Script Runner will launch it on its next start."
+
+# BEGIN display-manager supervisor install
+SUPERVISOR_SOURCE="$PLUGIN_DIR/scripts/display-manager-supervisor.py"
+SUPERVISOR_DEST="/usr/data/opencreator/scripts/display-manager-supervisor.py"
+
+if [ -f "$SUPERVISOR_SOURCE" ]; then
+    mkdir -p /usr/data/opencreator/scripts
+    cp "$SUPERVISOR_SOURCE" "$SUPERVISOR_DEST"
+    chmod 755 "$SUPERVISOR_DEST"
+    echo "[OK] Display Manager supervisor installed."
+fi
+# END display-manager supervisor install
+
+# BEGIN display-manager exclusive startup
+STARTUP_DIR="/usr/data/opencreator/startup/scripts"
+
+for FILE in 40-grumpyscreen.sh 41-helixscreen.sh; do
+    BAK="$PLUGIN_DIR/$FILE.bak"
+
+    if [ ! -f "$BAK" ] && [ -f "$STARTUP_DIR/$FILE" ]; then
+        cp -p "$STARTUP_DIR/$FILE" "$BAK"
+    fi
+
+    rm -f "$STARTUP_DIR/$FILE"
+done
+
+# Script Runner deve avviare il supervisor, non direttamente il manager.
+rm -f "$SCRIPTS_DIR/display-manager.sh"
+cp "$SOURCE" "$SCRIPTS_DIR/display-manager.sh.run"
+chmod 755 "$SCRIPTS_DIR/display-manager.sh.run"
+
+SUPERVISOR_SOURCE="$PLUGIN_DIR/scripts/display-manager-supervisor.py"
+SUPERVISOR_DEST="$SCRIPTS_DIR/display-manager-supervisor.py"
+
+cp "$SUPERVISOR_SOURCE" "$SUPERVISOR_DEST"
+chmod 755 "$SUPERVISOR_DEST"
+
+echo "[OK] Exclusive Display Manager startup configured."
+# END display-manager exclusive startup

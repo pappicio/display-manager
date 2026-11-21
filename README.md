@@ -1,139 +1,280 @@
-## OpenCreator Display Manager
+# \## OpenCreator Display Manager
 
-OpenCreator Display Manager manages GrumpyScreen and HelixScreen on the FlashForge Creator 5.
+# 
 
-It allows switching between the two interfaces using Klipper G-code macros.
+# OpenCreator Display Manager manages GrumpyScreen and HelixScreen on the FlashForge Creator 5.
 
-Screen Selection
+# 
 
-The selected interface is controlled by:
+# It allows switching between the two interfaces using Klipper G-code macros.
 
-/usr/data/opencreator/screen
+# 
 
-# Accepted values:
+# Screen Selection
 
-grumpy
+# 
 
-helix
+# The selected interface is controlled by:
 
-The Display Manager monitors this file every second and switches the active interface whenever its contents change.
+# 
 
-The installer creates this file with grumpy as the default value if it does not already exist. An existing valid selection is preserved.
+# /usr/data/opencreator/screen
 
-Operating Modes
+# 
 
-The operating mode (SoC or Tunneled) is detected when the Display Manager starts.
+# \# Accepted values:
 
-Moonraker addresses:
+# 
 
-Mode
+# grumpy
 
-Moonraker address
+# 
 
-SoC
+# helix
 
-127.0.0.1:7125
+# 
 
-Tunneled
+# The Display Manager monitors this file every second and switches the active interface whenever its contents change.
 
-RASPBERRY_IP:7125
+# 
 
-The manager automatically updates the Moonraker address in the respective screen configuration.
+# The installer creates this file with grumpy as the default value if it does not already exist. An existing valid selection is preserved.
 
-Configuration Files
+# 
 
-GrumpyScreen
+# Operating Modes
 
-/usr/data/opencreator/klipper/config/grumpyscreen.cfg
+# 
 
-HelixScreen
+# The operating mode (SoC or Tunneled) is detected when the Display Manager starts.
 
-/usr/data/helixscreen/config/settings.json
+# 
 
-Only the Moonraker address is modified. Other configuration settings are preserved.
+# Moonraker addresses:
 
-Klipper Integration
+# 
 
-The installer creates or updates:
+# Mode
 
-/usr/data/opencreator/klipper/config/oc-macros.cfg
+# 
 
-It also adds the following include to:
+# Moonraker address
 
-/usr/data/opencreator/klipper/config/printer.base.cfg
+# 
 
-#BEGIN display-manager include
-[include oc-macros.cfg]
-#END display-manager include
+# SoC
 
-G-code Commands
+# 
 
-The generated oc-macros.cfg contains two shell command definitions and two user-facing G-code macros.
+# 127.0.0.1:7125
 
-Shell command definitions:
+# 
 
-[gcode_shell_command switch_grumpy]
-command: sh -c "echo grumpy > /usr/data/opencreator/screen"
-timeout: 5.
-verbose: False
+# Tunneled
 
-[gcode_shell_command switch_helix]
-command: sh -c "echo helix > /usr/data/opencreator/screen"
-timeout: 5.
-verbose: False
+# 
 
-G-code macros:
+# RASPBERRY\_IP:7125
 
-[gcode_macro SCREEN_GRUMPY]
-description: Switch to GrumpyScreen
-gcode:
-    RUN_SHELL_COMMAND CMD=switch_grumpy
+# 
 
-[gcode_macro SCREEN_HELIX]
-description: Switch to HelixScreen
-gcode:
-    RUN_SHELL_COMMAND CMD=switch_helix
+# The manager automatically updates the Moonraker address in the respective screen configuration.
 
-How to Switch Screens
+# 
 
-Run either command from the Klipper console:
+# Configuration Files
 
-SCREEN_GRUMPY – switches to GrumpyScreen.
+# 
 
-SCREEN_HELIX – switches to HelixScreen.
+# GrumpyScreen
 
-You can also assign these macros to buttons in your preferred interface.
+# 
 
-The switch is handled automatically by the Display Manager. No manual restart is required.
+# /usr/data/opencreator/klipper/config/grumpyscreen.cfg
 
-Log Files
+# 
 
-The Display Manager and screen applications write their logs to:
+# HelixScreen
 
-Component
+# 
 
-Log file
+# /usr/data/helixscreen/config/settings.json
 
-Display Manager
+# 
 
-/tmp/oc-display-manager.log
+# Only the Moonraker address is modified. Other configuration settings are preserved.
 
-GrumpyScreen
+# 
 
-/tmp/grumpyscreen.log
+# Klipper Integration
 
-HelixScreen
+# 
 
-/tmp/HelixScreen.log
+# The installer creates or updates:
 
-HelixScreen Launcher
+# 
 
-/tmp/helixscreen-launcher.log
+# /usr/data/opencreator/klipper/config/oc-macros.cfg
 
-Requirements
+# 
 
-Script Runner must be installed before installing Display Manager.
+# It also adds the following include to:
 
-Both GrumpyScreen and HelixScreen must be available.
+# 
 
-Klipper must support the gcode_shell_command extension.
+# /usr/data/opencreator/klipper/config/printer.base.cfg
+
+# 
+
+# \#BEGIN display-manager include
+
+# \[include oc-macros.cfg]
+
+# \#END display-manager include
+
+# 
+
+# G-code Commands
+
+# 
+
+# The generated oc-macros.cfg contains two shell command definitions and two user-facing G-code macros.
+
+# 
+
+# Shell command definitions:
+
+# 
+
+# \[gcode\_shell\_command switch\_grumpy]
+
+# command: sh -c "echo grumpy > /usr/data/opencreator/screen"
+
+# timeout: 5.
+
+# verbose: False
+
+# 
+
+# \[gcode\_shell\_command switch\_helix]
+
+# command: sh -c "echo helix > /usr/data/opencreator/screen"
+
+# timeout: 5.
+
+# verbose: False
+
+# 
+
+# G-code macros:
+
+# 
+
+# \[gcode\_macro SCREEN\_GRUMPY]
+
+# description: Switch to GrumpyScreen
+
+# gcode:
+
+# &#x20;   RUN\_SHELL\_COMMAND CMD=switch\_grumpy
+
+# 
+
+# \[gcode\_macro SCREEN\_HELIX]
+
+# description: Switch to HelixScreen
+
+# gcode:
+
+# &#x20;   RUN\_SHELL\_COMMAND CMD=switch\_helix
+
+# 
+
+# How to Switch Screens
+
+# 
+
+# Run either command from the Klipper console:
+
+# 
+
+# SCREEN\_GRUMPY – switches to GrumpyScreen.
+
+# 
+
+# SCREEN\_HELIX – switches to HelixScreen.
+
+# 
+
+# You can also assign these macros to buttons in your preferred interface.
+
+# 
+
+# The switch is handled automatically by the Display Manager. No manual restart is required.
+
+# 
+
+# Log Files
+
+# 
+
+# The Display Manager and screen applications write their logs to:
+
+# 
+
+# Component
+
+# 
+
+# Log file
+
+# 
+
+# Display Manager
+
+# 
+
+# /tmp/oc-display-manager.log
+
+# 
+
+# GrumpyScreen
+
+# 
+
+# /tmp/grumpyscreen.log
+
+# 
+
+# HelixScreen
+
+# 
+
+# /tmp/HelixScreen.log
+
+# 
+
+# HelixScreen Launcher
+
+# 
+
+# /tmp/helixscreen-launcher.log
+
+# 
+
+# Requirements
+
+# 
+
+# Script Runner must be installed before installing Display Manager.
+
+# 
+
+# Both GrumpyScreen and HelixScreen must be available.
+
+# 
+
+# Klipper must support the gcode\_shell\_command extension.
+
+
+
