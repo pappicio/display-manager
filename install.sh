@@ -1,3 +1,4 @@
+
 #!/opt/bin/sh
 set -eu
 
@@ -5,7 +6,7 @@ PLUGIN_DIR="${OC_PLUGIN_DIR:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}"
 PLUGIN_MANIFEST="/usr/data/opencreator/plugins/script-runner/opencreator-plugin.json"
 SCRIPTS_DIR="/usr/data/opencreator/scripts"
 SOURCE="$PLUGIN_DIR/scripts/display-manager.sh"
-DEST="$SCRIPTS_DIR/display-manager.sh"
+SUPERVISOR_SOURCE="$PLUGIN_DIR/scripts/display-manager-supervisor.py"
 CONFIG_DIR="/usr/data/opencreator/klipper/config"
 PYTHON="/usr/data/python-hf/bin/python3"
 
@@ -27,6 +28,11 @@ echo "[OK] Script Runner installed."
 
 if [ ! -f "$SOURCE" ]; then
     echo "[ERROR] Missing $SOURCE"
+    exit 1
+fi
+
+if [ ! -f "$SUPERVISOR_SOURCE" ]; then
+    echo "[ERROR] Missing $SUPERVISOR_SOURCE"
     exit 1
 fi
 
@@ -188,12 +194,7 @@ fi
 echo "[OK] HelixScreen verified."
 
 echo
-echo "========== DISPLAY MANAGER =========="
-
-mkdir -p "$SCRIPTS_DIR"
-cp "$SOURCE" "$DEST"
-chmod 755 "$DEST"
-echo "[OK] Installed $DEST"
+echo "========== KLIPPER CONFIGURATION =========="
 
 "$PYTHON" - "$CONFIG_DIR" <<'PY'
 import re
@@ -221,12 +222,12 @@ timeout: 5.
 verbose: False
 
 [gcode_macro SCREEN_GRUMPY]
-description: Passa a GrumpyScreen
+description: Switch to GrumpyScreen
 gcode:
     RUN_SHELL_COMMAND CMD=switch_grumpy
 
 [gcode_macro SCREEN_HELIX]
-description: Passa a HelixScreen
+description: Switch to HelixScreen
 gcode:
     RUN_SHELL_COMMAND CMD=switch_helix
 # END display-manager"""
@@ -288,47 +289,45 @@ print("[OK] Klipper macros installed.")
 PY
 
 echo
-echo "========== INSTALLATION SUMMARY =========="
-echo "[OK] GrumpyScreen: $GRUMPY_BIN"
-echo "[OK] HelixScreen:  $HELIX_BIN"
-echo "[OK] Display Manager installed."
-echo "Script Runner will launch it on its next start."
+echo "========== DISPLAY MANAGER INSTALLATION =========="
 
-# BEGIN display-manager supervisor install
-SUPERVISOR_SOURCE="$PLUGIN_DIR/scripts/display-manager-supervisor.py"
-SUPERVISOR_DEST="/usr/data/opencreator/scripts/display-manager-supervisor.py"
-
-if [ -f "$SUPERVISOR_SOURCE" ]; then
-    mkdir -p /usr/data/opencreator/scripts
-    cp "$SUPERVISOR_SOURCE" "$SUPERVISOR_DEST"
-    chmod 755 "$SUPERVISOR_DEST"
-    echo "[OK] Display Manager supervisor installed."
-fi
-# END display-manager supervisor install
-
-# BEGIN display-manager exclusive startup
 STARTUP_DIR="/usr/data/opencreator/startup/scripts"
 
+# Archive legacy startup scripts.
 for FILE in 40-grumpyscreen.sh 41-helixscreen.sh; do
-    BAK="$PLUGIN_DIR/$FILE.bak"
+    SOURCE_FILE="$STARTUP_DIR/$FILE"
+    BACKUP_FILE="$PLUGIN_DIR/$FILE.bak"
 
-    if [ ! -f "$BAK" ] && [ -f "$STARTUP_DIR/$FILE" ]; then
-        cp -p "$STARTUP_DIR/$FILE" "$BAK"
+    if [ -f "$SOURCE_FILE" ]; then
+        mv -f "$SOURCE_FILE" "$BACKUP_FILE"
+        echo "[OK] Archived legacy startup script: $FILE"
     fi
-
-    rm -f "$STARTUP_DIR/$FILE"
 done
 
-# Script Runner deve avviare il supervisor, non direttamente il manager.
+# Install exactly two Script Runner files.
+mkdir -p "$SCRIPTS_DIR"
+
+# Remove the obsolete manager file, if present.
 rm -f "$SCRIPTS_DIR/display-manager.sh"
+
+# Install the manager with its required .run filename.
 cp "$SOURCE" "$SCRIPTS_DIR/display-manager.sh.run"
 chmod 755 "$SCRIPTS_DIR/display-manager.sh.run"
 
-SUPERVISOR_SOURCE="$PLUGIN_DIR/scripts/display-manager-supervisor.py"
-SUPERVISOR_DEST="$SCRIPTS_DIR/display-manager-supervisor.py"
+# Install the supervisor.
+cp "$SUPERVISOR_SOURCE" "$SCRIPTS_DIR/display-manager-supervisor.py"
+chmod 755 "$SCRIPTS_DIR/display-manager-supervisor.py"
 
-cp "$SUPERVISOR_SOURCE" "$SUPERVISOR_DEST"
-chmod 755 "$SUPERVISOR_DEST"
+echo "[OK] Installed display-manager.sh.run"
+echo "[OK] Installed display-manager-supervisor.py"
 
-echo "[OK] Exclusive Display Manager startup configured."
-# END display-manager exclusive startup
+echo
+echo "========== INSTALLATION SUMMARY =========="
+echo "[OK] GrumpyScreen: $GRUMPY_BIN"
+echo "[OK] HelixScreen:  $HELIX_BIN"
+echo "[OK] Display Manager: $SCRIPTS_DIR/display-manager.sh.run"
+echo "[OK] Supervisor:      $SCRIPTS_DIR/display-manager-supervisor.py"
+echo "[OK] Legacy startup scripts archived."
+echo "Script Runner will launch the Display Manager supervisor on its next start."
+echo
+echo "========== INSTALLATION COMPLETE =========="

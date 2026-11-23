@@ -1,9 +1,14 @@
 
+
 #!/opt/bin/sh
 
 OPENCREATOR="/usr/data/opencreator"
 SCREEN_FILE="$OPENCREATOR/screen"
 PID_FILE="/tmp/oc-display-manager.pid"
+
+PLUGIN_DIR="$OPENCREATOR/plugins/display-manager"
+STARTUP_SCRIPTS="$OPENCREATOR/startup/scripts"
+API_CONFIG="$OPENCREATOR/api-server.json"
 
 GRUMPY="/usr/data/grumpyscreen/grumpyscreen"
 GRUMPY_DEFAULT="/usr/data/grumpyscreen/grumpyscreen.cfg"
@@ -25,6 +30,34 @@ log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"
 }
 
+# Archive new legacy startup scripts without deleting old backups unnecessarily.
+migrate_startup_scripts() {
+    [ -d "$PLUGIN_DIR" ] || {
+        log "ERROR: Display Manager plugin directory not found: $PLUGIN_DIR"
+        return 1
+    }
+
+    for NAME in 40-grumpyscreen.sh 41-helixscreen.sh; do
+        SOURCE="$STARTUP_SCRIPTS/$NAME"
+        DESTINATION="$PLUGIN_DIR/$NAME.bak"
+
+        # Preserve the existing backup if there is no new source script.
+        [ -f "$SOURCE" ] || continue
+
+        # Replace the previous backup only when a new source exists.
+        rm -f "$DESTINATION"
+
+        if mv "$SOURCE" "$DESTINATION"; then
+            log "Legacy startup script archived: $SOURCE -> $DESTINATION"
+        else
+            log "ERROR: Failed to archive startup script: $SOURCE"
+            return 1
+        fi
+    done
+
+    return 0
+}
+
 detect_touch() {
     awk '
         /^N: Name=/ { name = tolower($0) }
@@ -38,7 +71,10 @@ detect_touch() {
     ' /proc/bus/input/devices 2>/dev/null
 }
 
-# Evita istanze multiple.
+# Archive legacy scripts before starting the display manager.
+migrate_startup_scripts || exit 1
+
+# Avoid multiple instances.
 if [ -f "$PID_FILE" ]; then
     OLD_PID="$(cat "$PID_FILE" 2>/dev/null)"
 
@@ -58,7 +94,7 @@ fi
 
 echo "$$" > "$PID_FILE"
 
-# Modalità rilevata una sola volta.
+# Detect operating mode once.
 if [ "${OC_TUNNELED+x}" = "x" ]; then
     if [ "$OC_TUNNELED" = "1" ]; then
         MODE="tunneled"
@@ -71,13 +107,66 @@ else
     MODE="soc"
 fi
 
+# Resolve the External Host IP dynamically from api-server.json.
+get_remote_host() {
+    PYTHON="$OPENCREATOR/klipper/klippy-env/bin/python"
+
+    if [ ! -x "$PYTHON" ]; then
+        PYTHON="$(command -v python3 2>/dev/null)"
+    fi
+
+    if [ -z "$PYTHON" ] || [ ! -x "$PYTHON" ]; then
+        PYTHON="$(command -v python 2>/dev/null)"
+    fi
+
+    if [ -z "$PYTHON" ] || [ ! -x "$PYTHON" ]; then
+        log "ERROR: Python interpreter not found"
+        return 1
+    fi
+
+    if [ ! -r "$API_CONFIG" ]; then
+        log "ERROR: API configuration not found: $API_CONFIG"
+        return 1
+    fi
+
+    REMOTE_HOST=$("$PYTHON" -c '
+import json
+import sys
+
+try:
+    with open(sys.argv[1], "r") as f:
+        config = json.load(f)
+    host = config.get("remote_host", "")
+    if isinstance(host, str):
+        print(host.strip())
+except Exception:
+    sys.exit(1)
+' "$API_CONFIG" 2>/dev/null) || {
+        log "ERROR: Cannot read remote_host from API configuration"
+        return 1
+    }
+
+    case "$REMOTE_HOST" in
+        ''|*[!A-Za-z0-9._:-]*)
+            log "ERROR: Invalid remote_host in API configuration"
+            return 1
+            ;;
+    esac
+
+    printf '%s' "$REMOTE_HOST"
+}
+
 if [ "$MODE" = "tunneled" ]; then
-    MOONRAKER_HOST="192.168.1.197"
+    MOONRAKER_HOST="$(get_remote_host)" || {
+        log "ERROR: Cannot resolve External Host Moonraker address"
+        rm -f "$PID_FILE"
+        exit 1
+    }
 else
     MOONRAKER_HOST="127.0.0.1"
 fi
 
-log "Avvio Display Manager: modalità=$MODE Moonraker=$MOONRAKER_HOST:7125"
+log "Display Manager started: mode=$MODE Moonraker=$MOONRAKER_HOST:7125"
 
 [ -f "$SCREEN_FILE" ] || printf 'grumpy\n' > "$SCREEN_FILE"
 
@@ -90,7 +179,7 @@ read_screen() {
     esac
 }
 
-# Aggiorna esclusivamente host nella sezione [moonraker] di Grumpy.
+# Update only the host in the [moonraker] section of Grumpy.
 prepare_grumpy() {
     if [ -d "$GRUMPY_CONFIG_DIR" ]; then
         if [ ! -f "$GRUMPY_CFG" ]; then
@@ -102,7 +191,7 @@ prepare_grumpy() {
     fi
 
     [ -f "$CFG" ] || {
-        log "ERRORE: configurazione Grumpy non trovata"
+        log "ERROR: Grumpy configuration not found"
         return 1
     }
 
@@ -134,18 +223,18 @@ prepare_grumpy() {
 
     if [ "$RESULT" -ne 0 ]; then
         rm -f "$TMP"
-        log "ERRORE: host non trovato nella configurazione Grumpy"
+        log "ERROR: Host not found in Grumpy configuration"
         return 1
     fi
 
     mv "$TMP" "$CFG" || return 1
 
-    log "Configurazione Grumpy aggiornata: $CFG ($MOONRAKER_HOST)"
+    log "Grumpy configuration updated: $CFG ($MOONRAKER_HOST)"
 }
 
 start_grumpy() {
     [ -x "$GRUMPY" ] || {
-        log "ERRORE: eseguibile Grumpy non trovato"
+        log "ERROR: Grumpy executable not found"
         return 1
     }
 
@@ -162,7 +251,7 @@ start_grumpy() {
     DISPLAY_PID=$!
     DISPLAY_TYPE="grumpy"
 
-    log "Grumpy avviato PID=$DISPLAY_PID"
+    log "Grumpy started PID=$DISPLAY_PID"
 }
 
 is_descendant() {
@@ -187,7 +276,7 @@ is_descendant() {
 }
 
 stop_stock_helix() {
-    log "Ricerca Helix originale..."
+    log "Searching for original Helix..."
 
     ROOTS=""
 
@@ -222,7 +311,7 @@ stop_stock_helix() {
             esac
         done
 
-        log "Arresto Helix originale: supervisore PID=$ROOT_PID"
+        log "Stopping original Helix supervisor PID=$ROOT_PID"
 
         kill -TERM $PIDS 2>/dev/null
         sleep 2
@@ -233,37 +322,6 @@ stop_stock_helix() {
             fi
         done
     done
-}
-
-start_helix() {
-    stop_stock_helix
-
-    log "Avvio Helix con Moonraker $MOONRAKER_HOST:7125"
-
-    "$HELIX_LAUNCHER" --moonraker "ws://$MOONRAKER_HOST:7125" &
-    LAUNCHER_PID=$!
-
-    WATCHDOG_PID=""
-
-    COUNT=0
-    while [ "$COUNT" -lt 10 ]; do
-        WATCHDOG_PID=$(find_helix_watchdog "$LAUNCHER_PID")
-        [ -n "$WATCHDOG_PID" ] && break
-        sleep 1
-        COUNT=$((COUNT + 1))
-    done
-
-    if [ -z "$WATCHDOG_PID" ]; then
-        log "ERRORE: watchdog Helix non trovato"
-        kill -TERM "$LAUNCHER_PID" 2>/dev/null
-        return 1
-    fi
-
-    DISPLAY_PID="$WATCHDOG_PID"
-    DISPLAY_TYPE=helix
-
-    log "Helix avviato: watchdog PID=$DISPLAY_PID Moonraker=$MOONRAKER_HOST:7125"
-    return 0
 }
 
 find_helix_watchdog() {
@@ -290,10 +348,41 @@ find_helix_watchdog() {
     return 1
 }
 
+start_helix() {
+    stop_stock_helix
+
+    log "Starting Helix with Moonraker $MOONRAKER_HOST:7125"
+
+    "$HELIX_LAUNCHER" --moonraker "ws://$MOONRAKER_HOST:7125" &
+    LAUNCHER_PID=$!
+
+    WATCHDOG_PID=""
+
+    COUNT=0
+    while [ "$COUNT" -lt 10 ]; do
+        WATCHDOG_PID=$(find_helix_watchdog "$LAUNCHER_PID")
+        [ -n "$WATCHDOG_PID" ] && break
+        sleep 1
+        COUNT=$((COUNT + 1))
+    done
+
+    if [ -z "$WATCHDOG_PID" ]; then
+        log "ERROR: Helix watchdog not found"
+        kill -TERM "$LAUNCHER_PID" 2>/dev/null
+        return 1
+    fi
+
+    DISPLAY_PID="$WATCHDOG_PID"
+    DISPLAY_TYPE="helix"
+
+    log "Helix started: watchdog PID=$DISPLAY_PID Moonraker=$MOONRAKER_HOST:7125"
+    return 0
+}
+
 stop_display() {
     [ -n "$DISPLAY_PID" ] || return 0
 
-    log "Arresto display $DISPLAY_TYPE PID=$DISPLAY_PID"
+    log "Stopping display $DISPLAY_TYPE PID=$DISPLAY_PID"
 
     if [ "$DISPLAY_TYPE" = "helix" ]; then
         kill -TERM "$DISPLAY_PID" 2>/dev/null
@@ -333,7 +422,7 @@ cleanup() {
         rm -f "$PID_FILE"
     fi
 
-    log "Display Manager arrestato"
+    log "Display Manager stopped"
     exit 0
 }
 
@@ -349,10 +438,10 @@ while :; do
 
         CURRENT="$DESIRED"
 
-        log "Cambio display: $CURRENT"
+        log "Display change: $CURRENT"
 
         if ! start_display "$CURRENT"; then
-            log "Errore avvio $CURRENT"
+            log "Failed to start $CURRENT"
             sleep 3
         fi
 
@@ -361,12 +450,12 @@ while :; do
 
         if [ -n "$DISPLAY_PID" ]; then
             wait "$DISPLAY_PID" 2>/dev/null
-            log "$CURRENT terminato"
+            log "$CURRENT terminated"
             DISPLAY_PID=""
             DISPLAY_TYPE=""
         fi
 
-        log "Riavvio $CURRENT tra 3 secondi"
+        log "Restarting $CURRENT in 3 seconds"
         sleep 3
 
         [ "$STOPPING" = "1" ] && break
@@ -376,7 +465,7 @@ while :; do
         [ "$DESIRED" = "$CURRENT" ] || continue
 
         if ! start_display "$CURRENT"; then
-            log "Errore riavvio $CURRENT"
+            log "Failed to restart $CURRENT"
         fi
     fi
 
