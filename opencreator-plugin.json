@@ -1,10 +1,18 @@
+
 {
   "id": "display-manager",
   "name": "OpenCreator Display Manager",
-  "version": "1.1.2",
-  "description": "Switch between HelixScreen and GrumpyScreen using Klipper macros. Requires Script Runner. Tunneled mode is not supported or tested, and no support is provided for its use in Tunneled mode.",
-  "dependencies": [
-    "script-runner"
+  "version": "1.2.0",
+  "description": "Switch between HelixScreen and GrumpyScreen using Klipper macros. Tunneled mode is not supported or tested, and no support is provided for its use in Tunneled mode.",
+  "startup": [
+    {
+      "name": "display-manager",
+      "exec": "scripts/display-manager-supervisor.sh",
+      "type": "service"
+    }
+  ],
+  "restart": [
+    "klipper"
   ],
   "scripts": {
     "install": "install.sh",

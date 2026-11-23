@@ -3,38 +3,42 @@
 set -eu
 
 PLUGIN_DIR="${OC_PLUGIN_DIR:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}"
-PLUGIN_MANIFEST="/usr/data/opencreator/plugins/script-runner/opencreator-plugin.json"
-SCRIPTS_DIR="/usr/data/opencreator/scripts"
-SOURCE="$PLUGIN_DIR/scripts/display-manager.sh"
-SUPERVISOR_SOURCE="$PLUGIN_DIR/scripts/display-manager-supervisor.py"
-CONFIG_DIR="/usr/data/opencreator/klipper/config"
+PLUGIN_DATA="${OC_PLUGIN_DATA:?OC_PLUGIN_DATA is not set}"
+CONFIG_DIR="${OC_CONFIG_DIR:-/usr/data/opencreator/klipper/config}"
 PYTHON="/usr/data/python-hf/bin/python3"
 
 GRUMPY_DIR="/usr/data/grumpyscreen"
 GRUMPY_BIN="$GRUMPY_DIR/grumpyscreen"
+
 HELIX_DIR="/usr/data/helixscreen"
 HELIX_BIN="$HELIX_DIR/bin/helix-screen"
 HELIX_URL="https://github.com/prestonbrown/helixscreen/releases/download/v1.1.0-rc.4/helixscreen-k1-v1.1.0-rc.4.tar.gz"
 
+SOURCE="$PLUGIN_DIR/scripts/display-manager.sh"
+SUPERVISOR_SOURCE="$PLUGIN_DIR/scripts/display-manager-supervisor.py"
+
+LEGACY_DIR="/usr/data/opencreator/startup/scripts"
+LEGACY_BACKUP_DIR="$PLUGIN_DATA/legacy-startup"
+
+SHARED_SCRIPTS="/usr/data/opencreator/scripts"
+
 echo
 echo "========== DISPLAY MANAGER INSTALLER =========="
 
-echo "[CHECK] Script Runner..."
-if [ ! -f "$PLUGIN_MANIFEST" ] || ! grep -q '"id"[[:space:]]*:[[:space:]]*"script-runner"' "$PLUGIN_MANIFEST"; then
-    echo "[ERROR] Script Runner is not installed."
-    exit 1
-fi
-echo "[OK] Script Runner installed."
+# Validate native plugin files.
+for FILE in "$SOURCE" "$SUPERVISOR_SOURCE"; do
+    if [ ! -f "$FILE" ]; then
+        echo "[ERROR] Missing $FILE"
+        exit 1
+    fi
+done
 
-if [ ! -f "$SOURCE" ]; then
-    echo "[ERROR] Missing $SOURCE"
+[ -x "$PYTHON" ] || {
+    echo "[ERROR] Python interpreter not found: $PYTHON"
     exit 1
-fi
+}
 
-if [ ! -f "$SUPERVISOR_SOURCE" ]; then
-    echo "[ERROR] Missing $SUPERVISOR_SOURCE"
-    exit 1
-fi
+echo "[OK] Native plugin files verified."
 
 echo
 echo "========== GRUMPYSCREEN =========="
@@ -78,7 +82,6 @@ candidates = [
 
 if len(candidates) != 1:
     print("[ERROR] Expected exactly one MIPS/K1 archive.")
-    print("[INFO] Available release assets:")
     for asset in assets:
         print("  " + asset["name"])
     sys.exit(1)
@@ -88,6 +91,7 @@ print("[DOWNLOAD]", asset["name"])
 
 with tempfile.TemporaryDirectory(prefix="grumpy-") as tmp:
     archive = Path(tmp) / asset["name"]
+
     with get(asset["browser_download_url"]) as response, archive.open("wb") as out:
         shutil.copyfileobj(response, out)
 
@@ -101,6 +105,7 @@ with tempfile.TemporaryDirectory(prefix="grumpy-") as tmp:
                 if p.is_absolute() or ".." in p.parts:
                     raise SystemExit("[ERROR] Unsafe archive path")
             z.extractall(extracted)
+
     elif tarfile.is_tarfile(archive):
         with tarfile.open(archive) as t:
             for member in t.getmembers():
@@ -113,11 +118,9 @@ with tempfile.TemporaryDirectory(prefix="grumpy-") as tmp:
 
     binaries = list(extracted.rglob("grumpyscreen"))
     if not binaries:
-        raise SystemExit("[ERROR] grumpyscreen binary not found in archive")
+        raise SystemExit("[ERROR] grumpyscreen binary not found")
 
-    binary = binaries[0]
-    source_dir = binary.parent
-    print("[INSTALL] Copying GrumpyScreen files to", dest)
+    source_dir = binaries[0].parent
     dest.mkdir(parents=True, exist_ok=True)
 
     for item in source_dir.iterdir():
@@ -140,6 +143,7 @@ if [ ! -x "$GRUMPY_BIN" ]; then
     echo "[ERROR] GrumpyScreen verification failed."
     exit 1
 fi
+
 echo "[OK] GrumpyScreen verified."
 
 echo
@@ -169,7 +173,6 @@ else
         exit 1
     fi
 
-    echo "[INSTALL] Copying HelixScreen files to $HELIX_DIR..."
     mkdir -p "$HELIX_DIR"
     cp -a "$PACKAGE_DIR/." "$HELIX_DIR/"
 
@@ -180,7 +183,6 @@ else
 
     find "$HELIX_DIR/bin" -type f -exec chmod 755 {} \;
 
-    echo "[CLEANUP] Removing temporary files..."
     rm -rf "$EXTRACT" "$ARCHIVE"
 
     echo "[OK] HelixScreen installed successfully."
@@ -239,8 +241,10 @@ include = """# BEGIN display-manager include
 def update(path, start, finish, replacement, conflicts=()):
     text = path.read_text() if path.exists() else ""
     a, b = text.count(start), text.count(finish)
+
     if a != b or a > 1:
         raise SystemExit(f"Invalid markers in {path}")
+
     if a:
         pos = text.index(start)
         endpos = text.index(finish, pos) + len(finish)
@@ -248,12 +252,16 @@ def update(path, start, finish, replacement, conflicts=()):
     else:
         for pattern, name in conflicts:
             if re.search(pattern, text, re.M):
-                raise SystemExit(f"{name} already exists outside managed block in {path}")
+                raise SystemExit(
+                    f"{name} already exists outside managed block in {path}"
+                )
+
         if text and not text.endswith("\n"):
             text += "\n"
         if text:
             text += "\n"
         text += replacement + "\n"
+
     path.write_text(text)
 
 config.mkdir(parents=True, exist_ok=True)
@@ -270,6 +278,7 @@ if not printer.is_file():
 
 text = printer.read_text()
 a, b = text.count(ibegin), text.count(iend)
+
 if a != b or a > 1:
     raise SystemExit(f"Invalid include markers in {printer}")
 
@@ -289,45 +298,58 @@ print("[OK] Klipper macros installed.")
 PY
 
 echo
-echo "========== DISPLAY MANAGER INSTALLATION =========="
+echo "========== LEGACY STARTUP MIGRATION =========="
 
-STARTUP_DIR="/usr/data/opencreator/startup/scripts"
+mkdir -p "$LEGACY_BACKUP_DIR"
 
-# Archive legacy startup scripts.
 for FILE in 40-grumpyscreen.sh 41-helixscreen.sh; do
-    SOURCE_FILE="$STARTUP_DIR/$FILE"
-    BACKUP_FILE="$PLUGIN_DIR/$FILE.bak"
+    SOURCE_FILE="$LEGACY_DIR/$FILE"
+    BACKUP_FILE="$LEGACY_BACKUP_DIR/$FILE"
+
+    # Migrate backups created by the previous installer.
+    OLD_BACKUP="$PLUGIN_DIR/$FILE.bak"
+
+    if [ -f "$OLD_BACKUP" ] && [ ! -e "$BACKUP_FILE" ]; then
+        mv "$OLD_BACKUP" "$BACKUP_FILE"
+        echo "[OK] Migrated previous backup: $FILE"
+    fi
 
     if [ -f "$SOURCE_FILE" ]; then
-        mv -f "$SOURCE_FILE" "$BACKUP_FILE"
-        echo "[OK] Archived legacy startup script: $FILE"
+        if [ ! -e "$BACKUP_FILE" ]; then
+            mv "$SOURCE_FILE" "$BACKUP_FILE"
+            echo "[OK] Archived legacy startup script: $FILE"
+        else
+            echo "[WARNING] Existing backup preserved; legacy script left untouched: $FILE"
+        fi
     fi
 done
 
-# Install exactly two Script Runner files.
-mkdir -p "$SCRIPTS_DIR"
+echo
+echo "========== LEGACY SCRIPT CLEANUP =========="
 
-# Remove the obsolete manager file, if present.
-rm -f "$SCRIPTS_DIR/display-manager.sh"
-
-# Install the manager with its required .run filename.
-cp "$SOURCE" "$SCRIPTS_DIR/display-manager.sh.run"
-chmod 755 "$SCRIPTS_DIR/display-manager.sh.run"
-
-# Install the supervisor.
-cp "$SUPERVISOR_SOURCE" "$SCRIPTS_DIR/display-manager-supervisor.py"
-chmod 755 "$SCRIPTS_DIR/display-manager-supervisor.py"
-
-echo "[OK] Installed display-manager.sh.run"
-echo "[OK] Installed display-manager-supervisor.py"
+# Remove only files previously owned by Display Manager.
+# Never delete unrelated user scripts.
+if [ -d "$SHARED_SCRIPTS" ]; then
+    for FILE in \
+        display-manager.sh \
+        display-manager.sh.run \
+        display-manager-supervisor.py
+    do
+        if [ -f "$SHARED_SCRIPTS/$FILE" ] || [ -L "$SHARED_SCRIPTS/$FILE" ]; then
+            rm -f "$SHARED_SCRIPTS/$FILE"
+            echo "[OK] Removed legacy shared file: $FILE"
+        fi
+    done
+fi
 
 echo
 echo "========== INSTALLATION SUMMARY =========="
 echo "[OK] GrumpyScreen: $GRUMPY_BIN"
-echo "[OK] HelixScreen:  $HELIX_BIN"
-echo "[OK] Display Manager: $SCRIPTS_DIR/display-manager.sh.run"
-echo "[OK] Supervisor:      $SCRIPTS_DIR/display-manager-supervisor.py"
-echo "[OK] Legacy startup scripts archived."
-echo "Script Runner will launch the Display Manager supervisor on its next start."
+echo "[OK] HelixScreen: $HELIX_BIN"
+echo "[OK] Display Manager source: $SOURCE"
+echo "[OK] Supervisor source: $SUPERVISOR_SOURCE"
+echo "[OK] Legacy startup backups: $LEGACY_BACKUP_DIR"
+echo "[OK] No files copied to opencreator/scripts."
+echo "[OK] OpenCreator will start the native service from the manifest."
 echo
 echo "========== INSTALLATION COMPLETE =========="

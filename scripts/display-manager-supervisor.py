@@ -8,7 +8,9 @@ import subprocess
 import time
 from pathlib import Path
 
-MANAGER = "/usr/data/opencreator/scripts/display-manager.sh.run"
+
+MANAGER = str(Path(__file__).resolve().with_name("display-manager.run"))
+
 PID_FILE = "/tmp/oc-display-manager-supervisor.pid"
 LOG = "/tmp/oc-display-manager-supervisor.log"
 
