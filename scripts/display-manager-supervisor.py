@@ -1,5 +1,7 @@
 #!/usr/data/python-hf/bin/python3
 
+# OC_RUNNER: persistent
+
 import os
 import signal
 import subprocess
